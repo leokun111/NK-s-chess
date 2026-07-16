@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REDACTED — Concealed Chess</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+<style>
+  :root{
+    --bg:#12151a;
+    --paper:#e8e4d8;
+    --paper-dim:#b9b6a8;
+    --olive:#8a9166;
+    --olive-dim:#5c6146;
+    --ink:#1b1d16;
+    --alert:#b3402d;
+    --light-sq:#d9d3bd;
+    --dark-sq:#6b6f52;
+    --stamp:#0e0f0c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse at top left, rgba(138,145,102,0.08), transparent 60%),
+      var(--bg);
+    color:var(--paper);
+    font-family: 'Courier New', Courier, monospace;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:24px 14px 60px;
+  }
+  .masthead{
+    width:100%;
+    max-width:920px;
+    border-bottom:2px solid var(--olive-dim);
+    padding-bottom:12px;
+    margin-bottom:18px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .masthead h1{
+    font-size:1.5rem;
+    letter-spacing:0.16em;
+    margin:0;
+    color:var(--paper);
+  }
+  .masthead h1 span{color:var(--olive);}
+  .masthead .file-tag{
+    font-size:0.68rem;
+    color:var(--paper-dim);
+    letter-spacing:0.08em;
+    text-align:right;
+    line-height:1.5;
+  }
+  #linkState{
+    width:100%;
+    max-width:920px;
+    font-size:0.72rem;
+    letter-spacing:0.06em;
+    color:var(--olive);
+    margin-bottom:16px;
+    text-transform:uppercase;
+  }
+  #linkState.down{color:var(--alert);}
+  .stage{
+    display:flex;
+    gap:28px;
+    max-width:920px;
+    width:100%;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .board-wrap{ position:relative; }
+  #status{
+    font-size:0.85rem;
+    letter-spacing:0.08em;
+    color:var(--olive);
+    margin-bottom:8px;
+    min-height:1.2em;
+    text-transform:uppercase;
+  }
+  #status.alert{color:var(--alert);}
+  #board{
+    display:grid;
+    grid-template-columns:repeat(8,min(11vw,56px));
+    grid-template-rows:repeat(8,min(11vw,56px));
+    border:3px solid var(--olive-dim);
+  }
+  .sq{
+    width:min(11vw,56px);height:min(11vw,56px);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+    cursor:pointer;
+    font-size:min(5.5vw,2rem);
+    user-select:none;
+  }
+  .sq.light{background:var(--light-sq);}
+  .sq.dark{background:var(--dark-sq);}
+  .sq.selected{outline:3px solid var(--alert); outline-offset:-3px;}
+  .sq.legal::after{
+    content:'';
+    position:absolute;
+    width:14px;height:14px;
+    border-radius:50%;
+    background:rgba(179,64,45,0.55);
+  }
+  .sq.legal.occupied::after{
+    width:100%;height:100%;
+    border-radius:0;
+    background:transparent;
+    border:4px solid rgba(179,64,45,0.6);
+    box-sizing:border-box;
+  }
+  .own-piece{ color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,0.25); }
+  .own-piece.black-owned{ color:#f4f1e6; text-shadow:0 1px 2px rgba(0,0,0,0.6); }
+  .unknown-unit{
+    width:70%;height:70%;
+    border-radius:3px;
+    background:repeating-linear-gradient(135deg, var(--stamp), var(--stamp) 4px, #1c1e17 4px, #1c1e17 8px);
+    border:2px solid rgba(0,0,0,0.5);
+    display:flex;align-items:center;justify-content:center;
+    font-size:0.55rem;
+    letter-spacing:0.05em;
+    color:var(--paper-dim);
+    transform:rotate(-3deg);
+  }
+  .sidebar{
+    width:260px;
+    border-left:1px solid var(--olive-dim);
+    padding-left:20px;
+    font-size:0.78rem;
+    line-height:1.5;
+  }
+  .sidebar h2{
+    font-size:0.75rem; letter-spacing:0.12em; color:var(--olive);
+    text-transform:uppercase; margin:0 0 10px;
+    border-bottom:1px solid var(--olive-dim); padding-bottom:6px;
+  }
+  .log{ max-height:240px; overflow-y:auto; margin-bottom:20px; }
+  .log-entry{ padding:5px 0; border-bottom:1px dotted rgba(184,182,162,0.2); color:var(--paper-dim); }
+  .log-entry b{color:var(--paper);}
+  button, input{
+    font-family:inherit;
+  }
+  button{
+    background:var(--olive-dim); color:var(--paper); border:1px solid var(--olive);
+    padding:8px 14px; letter-spacing:0.08em; text-transform:uppercase;
+    font-size:0.7rem; cursor:pointer; margin-top:10px;
+  }
+  button:hover{background:var(--olive); color:var(--ink);}
+  input[type=text]{
+    background:var(--ink); color:var(--paper); border:1px solid var(--olive-dim);
+    padding:8px 10px; font-size:0.78rem; letter-spacing:0.04em; width:100%;
+  }
+  .overlay{
+    position:absolute; inset:0;
+    background:rgba(14,15,12,0.97);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    text-align:center; z-index:5; padding:20px;
+  }
+  .overlay .stamp-text{
+    font-size:1rem; letter-spacing:0.12em; color:var(--paper);
+    border:2px solid var(--alert); padding:12px 18px; transform:rotate(-1deg);
+    margin-bottom:18px;
+  }
+  .lobby-choice{ display:flex; gap:10px; margin-top:6px; }
+  .lobby-panel{ display:none; flex-direction:column; gap:10px; width:220px; margin-top:16px; }
+  .lobby-panel.show{ display:flex; }
+  .code-box{
+    background:var(--ink); border:1px dashed var(--olive); padding:10px;
+    font-size:0.9rem; letter-spacing:0.05em; word-break:break-all; color:var(--paper);
+  }
+  small.hint{ color:var(--paper-dim); font-size:0.65rem; letter-spacing:0.05em; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <h1>REDACTED <span>// CONCEALED CHESS</span></h1>
+  <div class="file-tag">FIELD PROTOCOL 07<br>UNIT IDENTITY: EYES ONLY</div>
+</div>
+<div id="linkState">CHANNEL: OFFLINE</div>
+
+<div class="stage">
+  <div>
+    <div id="status">ESTABLISHING SECURE CHANNEL…</div>
+    <div class="board-wrap">
+      <div id="board"></div>
+      <div class="overlay" id="lobby">
+        <div class="stamp-text">SECURE CHANNEL SETUP</div>
+        <div class="lobby-choice">
+          <button id="hostBtn">Host Operation</button>
+          <button id="joinBtnShow">Join Operation</button>
+        </div>
+
+        <div class="lobby-panel" id="hostPanel">
+          <small class="hint">Send this code to your contact:</small>
+          <div class="code-box" id="hostCode">generating…</div>
+          <button id="copyCode">Copy Code</button>
+          <small class="hint" id="hostWaiting">Waiting for contact to connect…</small>
+        </div>
+
+        <div class="lobby-panel" id="joinPanel">
+          <small class="hint">Paste the code you received:</small>
+          <input type="text" id="joinInput" placeholder="peer code">
+          <button id="joinBtn">Connect</button>
+          <small class="hint" id="joinStatus"></small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <h2>Confirmed Contact</h2>
+    <div class="log" id="log">
+      <div class="log-entry">No engagements yet. Enemy unit types remain unknown until captured.</div>
+    </div>
+
+    <h2>Briefing</h2>
+    <ul class="rules" style="color:var(--paper-dim); font-size:0.72rem;">
+      <li>Your own units show true rank. Enemy units always render as an unmarked stamp — regardless of what threatens them or what they threaten.</li>
+      <li>Identity is revealed only at the moment of capture, logged above.</li>
+      <li>Full standard chess rules apply underneath (check, castling, en passant). Promotion auto-defaults to Queen.</li>
+      <li>Connection is direct peer-to-peer (WebRTC) — no account, no server, free. The code is only valid while both tabs stay open.</li>
+    </ul>
+    <button id="resetBtn">Restart Operation</button>
+  </div>
+</div>
+
+<script>
+const game = new Chess();
+let selected = null;
+let legalTargets = [];
+let myColor = null;      // 'w' or 'b' — assigned once connected
+let conn = null;
+let peer = null;
+let linkUp = false;
+
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const logEl = document.getElementById('log');
+const linkStateEl = document.getElementById('linkState');
+const lobby = document.getElementById('lobby');
+
+const files = ['a','b','c','d','e','f','g','h'];
+const ranks = ['8','7','6','5','4','3','2','1'];
+const PIECE_GLYPH = { w:{p:'♙',n:'♘',b:'♗',r:'♖',q:'♕',k:'♔'}, b:{p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'} };
+const RANK_NAME = {p:'PAWN',n:'KNIGHT',b:'BISHOP',r:'ROOK',q:'QUEEN',k:'KING'};
+
+function squareId(f,r){ return files[f]+ranks[r]; }
+
+function buildBoard(){
+  boardEl.innerHTML = '';
+  for(let r=0;r<8;r++){
+    for(let f=0;f<8;f++){
+      const sq = squareId(f,r);
+      const div = document.createElement('div');
+      div.className = 'sq ' + (((f+r)%2===0) ? 'light':'dark');
+      div.dataset.square = sq;
+      div.addEventListener('click', ()=>onSquareClick(sq));
+      boardEl.appendChild(div);
+    }
+  }
+}
+
+function render(){
+  const board = game.board();
+  document.querySelectorAll('.sq').forEach(div=>{
+    const sq = div.dataset.square;
+    const f = files.indexOf(sq[0]);
+    const r = ranks.indexOf(sq[1]);
+    const piece = board[r][f];
+    div.innerHTML = '';
+    div.classList.remove('selected','legal','occupied');
+
+    if(piece){
+      if(myColor && piece.color === myColor){
+        const span = document.createElement('span');
+        span.className = 'own-piece' + (piece.color==='b' ? ' black-owned':'');
+        span.textContent = PIECE_GLYPH[piece.color][piece.type];
+        div.appendChild(span);
+      } else {
+        const unk = document.createElement('div');
+        unk.className = 'unknown-unit';
+        unk.textContent = 'UNK';
+        div.appendChild(unk);
+      }
+    }
+    if(selected === sq) div.classList.add('selected');
+    if(legalTargets.includes(sq)){
+      div.classList.add('legal');
+      if(piece) div.classList.add('occupied');
+    }
+  });
+  updateStatus();
+}
+
+function updateStatus(){
+  statusEl.classList.remove('alert');
+  if(!linkUp){ statusEl.textContent = 'ESTABLISHING SECURE CHANNEL…'; return; }
+  if(game.in_checkmate()){
+    statusEl.textContent = (game.turn()==='w'?'BLACK':'WHITE') + ' WINS — CHECKMATE';
+    statusEl.classList.add('alert');
+    return;
+  }
+  if(game.in_draw() || game.in_stalemate() || game.in_threefold_repetition()){
+    statusEl.textContent = 'OPERATION STALLED — DRAW';
+    return;
+  }
+  const mine = game.turn() === myColor;
+  let txt = mine ? 'YOUR MOVE' : "AWAITING CONTACT'S MOVE";
+  if(game.in_check() && mine){ txt += ' — YOUR COMMAND IS IN CHECK'; statusEl.classList.add('alert'); }
+  statusEl.textContent = txt;
+}
+
+function onSquareClick(sq){
+  if(!linkUp || game.turn() !== myColor) return;
+  const piece = game.get(sq);
+
+  if(selected){
+    if(legalTargets.includes(sq)){
+      const move = game.move({from:selected, to:sq, promotion:'q'});
+      if(move){
+        logMove(move);
+        selected = null; legalTargets = [];
+        sendMsg({type:'move', from:move.from, to:move.to, promotion:'q'});
+        render();
+        return;
+      }
+    }
+    selected = null; legalTargets = [];
+    if(piece && piece.color === myColor){
+      selected = sq;
+      legalTargets = game.moves({square:sq, verbose:true}).map(m=>m.to);
+    }
+    render();
+    return;
+  }
+
+  if(piece && piece.color === myColor){
+    selected = sq;
+    legalTargets = game.moves({square:sq, verbose:true}).map(m=>m.to);
+    render();
+  }
+}
+
+function logMove(move){
+  if(!move.captured) return;
+  const capturerColor = move.color === 'w' ? 'WHITE' : 'BLACK';
+  const victimColor = move.color === 'w' ? 'BLACK' : 'WHITE';
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = '<b>' + capturerColor + '</b> eliminated a ' + victimColor +
+    ' <b>' + RANK_NAME[move.captured] + '</b> at ' + move.to + '.';
+  logEl.prepend(entry);
+}
+
+// ---- Networking ----
+function sendMsg(msg){ if(conn && conn.open) conn.send(msg); }
+
+function wireConnection(c, assignedColor){
+  conn = c;
+  myColor = assignedColor;
+  conn.on('open', ()=>{
+    linkUp = true;
+    lobby.style.display = 'none';
+    linkStateEl.textContent = 'CHANNEL: SECURE — YOU ARE ' + (myColor==='w'?'WHITE':'BLACK');
+    linkStateEl.classList.remove('down');
+    render();
+  });
+  conn.on('data', data=>{
+    if(data.type === 'move'){
+      const move = game.move({from:data.from, to:data.to, promotion:data.promotion||'q'});
+      if(move) logMove(move);
+      render();
+    } else if(data.type === 'reset'){
+      game.reset();
+      selected = null; legalTargets = [];
+      logEl.innerHTML = '<div class="log-entry">No engagements yet. Enemy unit types remain unknown until captured.</div>';
+      render();
+    }
+  });
+  conn.on('close', ()=>{
+    linkUp = false;
+    linkStateEl.textContent = 'CHANNEL: LOST';
+    linkStateEl.classList.add('down');
+  });
+}
+
+document.getElementById('hostBtn').addEventListener('click', ()=>{
+  document.getElementById('hostPanel').classList.add('show');
+  document.getElementById('joinPanel').classList.remove('show');
+  peer = new Peer();
+  peer.on('open', id=>{ document.getElementById('hostCode').textContent = id; });
+  peer.on('connection', c=>{
+    document.getElementById('hostWaiting').textContent = 'Contact connected.';
+    wireConnection(c, 'w');
+  });
+  peer.on('error', err=>{ document.getElementById('hostWaiting').textContent = 'Error: ' + err.type; });
+});
+
+document.getElementById('joinBtnShow').addEventListener('click', ()=>{
+  document.getElementById('joinPanel').classList.add('show');
+  document.getElementById('hostPanel').classList.remove('show');
+});
+
+document.getElementById('joinBtn').addEventListener('click', ()=>{
+  const targetId = document.getElementById('joinInput').value.trim();
+  if(!targetId) return;
+  document.getElementById('joinStatus').textContent = 'Connecting…';
+  peer = new Peer();
+  peer.on('open', ()=>{
+    const c = peer.connect(targetId, {reliable:true});
+    c.on('error', err=>{ document.getElementById('joinStatus').textContent = 'Error: ' + err; });
+    wireConnection(c, 'b');
+  });
+  peer.on('error', err=>{ document.getElementById('joinStatus').textContent = 'Error: ' + err.type; });
+});
+
+document.getElementById('copyCode').addEventListener('click', ()=>{
+  const code = document.getElementById('hostCode').textContent;
+  navigator.clipboard.writeText(code).catch(()=>{});
+});
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  game.reset();
+  selected = null; legalTargets = [];
+  logEl.innerHTML = '<div class="log-entry">No engagements yet. Enemy unit types remain unknown until captured.</div>';
+  sendMsg({type:'reset'});
+  render();
+});
+
+buildBoard();
+render();
+</script>
+
+</body>
+</html>
